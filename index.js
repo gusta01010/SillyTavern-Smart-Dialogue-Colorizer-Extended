@@ -56,7 +56,7 @@ const defaultExtSettings = {
     personaColorSettings: defaultCharColorSettings,
 };
 
-const extName = "Smart-Dialogue-Colorizer";
+const extName = "SillyTavern-Smart-Dialogue-Colorizer";
 const extFolderPath = `scripts/extensions/third-party/${extName}`;
 const extSettings = initializeSettings(extName, defaultExtSettings);
 
