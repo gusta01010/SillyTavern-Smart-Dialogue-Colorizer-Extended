@@ -9,8 +9,8 @@ import { extension_settings } from "../../../extensions.js";
 
 import { ExColor } from "./ExColor.js";
 import { CharacterType, STCharacter } from "./STCharacter.js";
-import { getImageVibrant, getValidSwatch } from "./color-utils.js";
-import { createColorSourceDropdown, createColorTargetDropdown, createColorTextPickerCombo } from "./element-creators.js";
+import { getSmartAvatarColor } from "./color-utils.js";
+import { createColorSourceDropdown, createColorTextPickerCombo } from "./element-creators.js";
 import { initializeSettings } from "./settings-utils.js";
 import { 
     expEventSource, 
@@ -37,39 +37,26 @@ const DEFAULT_STATIC_DIALOGUE_COLOR_RGB = [225, 138, 36];
  * @readonly
  */
 export const ColorizeSourceType = {
-    AVATAR_VIBRANT: "avatar_vibrant",
-    //AVATAR_DOMINANT: "avatar_dominant",
+    AVATAR_SMART: "avatar_smart",
     CHAR_COLOR_OVERRIDE: "char_color_override",
     STATIC_COLOR: "static_color",
     DISABLED: "disabled"
 };
 
 /**
- * @typedef {ValueOf<typeof ColorizeTargetType>} ColorizeTargetType
- * @readonly
- */
-export const ColorizeTargetType = {
-    QUOTED_TEXT: 1 << 0,
-    BUBBLES: 1 << 1,
-    QUOTED_TEXT_AND_BUBBLES: (1 << 0) | (1 << 1)
-};
-
-/**
- * @typedef {defaultExtSettings} XDCSettings
+ * @typedef {defaultExtSettings} SDCSettings
  */
 const defaultCharColorSettings = {
-    colorizeSource: ColorizeSourceType.AVATAR_VIBRANT,
+    colorizeSource: ColorizeSourceType.AVATAR_SMART,
     staticColor: DEFAULT_STATIC_DIALOGUE_COLOR_HEX,
     colorOverrides: {},
 };
 const defaultExtSettings = {
     charColorSettings: defaultCharColorSettings,
     personaColorSettings: defaultCharColorSettings,
-    colorizeTargets: ColorizeTargetType.QUOTED_TEXT,
-    chatBubbleLightness: 0.15,
 };
 
-const extName = "SillyTavern-Dialogue-Colorizer-Plus";
+const extName = "Smart-Dialogue-Colorizer";
 const extFolderPath = `scripts/extensions/third-party/${extName}`;
 const extSettings = initializeSettings(extName, defaultExtSettings);
 
@@ -87,26 +74,13 @@ async function getCharStyleString(stChar) {
 
     if (dialogueColor) {
         styleHtml += `
-            .mes[xdc-author_uid="${stChar.uid}"] {
+            .mes[sdc-author_uid="${stChar.uid}"] {
                 --character-color: #${dialogueColor.toHex()};
             }
+            .mes[sdc-author_uid="${stChar.uid}"] .mes_text q {
+                color: var(--character-color);
+            }
         `;
-
-        if (extSettings.colorizeTargets & ColorizeTargetType.QUOTED_TEXT) {
-            styleHtml += `
-                .mes[xdc-author_uid="${stChar.uid}"] .mes_text q {
-                    color: var(--character-color);
-                }
-            `;
-        }
-        if (extSettings.colorizeTargets & ColorizeTargetType.BUBBLES) {
-            styleHtml += `
-                .bubblechat .mes[xdc-author_uid="${stChar.uid}"] {
-                    background-color: var(--character-color) !important;
-                    border-color: var(--character-color) !important;
-                }
-            `;
-        }
     }
 
     return styleHtml;
@@ -167,6 +141,8 @@ function getSettingsForChar(charType) {
 }
 
 /**
+ * Improves color contrast for better readability on dark backgrounds.
+ * Ensures adequate saturation and luminance while preserving hue.
  * 
  * @param {import("./ExColor.js").ColorArray} rgb 
  * @returns {import("./ExColor.js").ColorArray}
@@ -174,29 +150,30 @@ function getSettingsForChar(charType) {
 function makeBetterContrast(rgb) {
     const [h, s, l, a] = ExColor.rgb2hsl(rgb);
 
-    // TODO: Very arbitrary and probably doesn't really make sense.
-    // Change this?
-    const nHue = h;
-    const nSat = s > 0.5 ? s - 0.1 : s + 0.3;
-    const nLum = l > 0.7 ? l : 0.7;
+    let nHue = h;
+    let nSat = s;
+    let nLum = l;
+
+    // Ensure minimum saturation for vibrancy
+    if (nSat < 0.4) {
+        nSat = Math.min(nSat + 0.3, 0.8);
+    }
+
+    // Ensure luminance is in readable range (not too dark, not too bright)
+    if (nLum < 0.5) {
+        nLum = 0.65; // Brighten dark colors
+    } else if (nLum < 0.7) {
+        nLum = 0.7; // Slight boost for mid-range
+    } else if (nLum > 0.85) {
+        nLum = 0.8; // Tone down very bright colors
+    }
 
     return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
 }
 
+let avatarColorCache = {};
 /**
- *  
- * @param {HTMLImageElement} image 
- * @param  {...(keyof VibrantSwatches)} swatchKeys 
- * @returns {Promise<[number, number, number]?>}
- */
-async function getVibrantColorRgb(image, ...swatchKeys) {
-    const vibrant = await getImageVibrant(image);
-    const swatch = getValidSwatch(vibrant.swatches(), ...swatchKeys);
-    return swatch?.getRgb();
-}
-
-let avatarVibrantColorCache = {};
-/**
+ * Gets the dialogue color for a character using smart color extraction.
  * 
  * @param {STCharacter} stChar 
  * @returns {Promise<ExColor?>}
@@ -208,15 +185,19 @@ async function getCharacterDialogueColor(stChar) {
         : colorSettings.colorizeSource;
 
     switch (colorizeSource) {
-        case ColorizeSourceType.AVATAR_VIBRANT: {
-            if (avatarVibrantColorCache[stChar.uid]) {
-                return avatarVibrantColorCache[stChar.uid];
+        case ColorizeSourceType.AVATAR_SMART: {
+            // Check cache first
+            if (avatarColorCache[stChar.uid]) {
+                return avatarColorCache[stChar.uid];
             }
+            
             const avatar = stChar.getAvatarImageThumbnail();
-            const colorRgb = await getVibrantColorRgb(avatar, "Vibrant", "Muted");
+            const colorRgb = await getSmartAvatarColor(avatar);
             const betterContrastRgb = colorRgb ? makeBetterContrast(colorRgb) : DEFAULT_STATIC_DIALOGUE_COLOR_RGB;
             const exColor = ExColor.fromRgb(betterContrastRgb);
-            avatarVibrantColorCache[stChar.uid] = exColor;
+            
+            // Cache the result
+            avatarColorCache[stChar.uid] = exColor;
             return exColor;
         }
         case ColorizeSourceType.STATIC_COLOR: {
@@ -234,24 +215,6 @@ async function getCharacterDialogueColor(stChar) {
 
 /**
  * 
- * @param {STCharacter} stChar 
- * @returns {Promise<ExColor?>}
- */
-async function getCharacterBubbleColor(stChar) {
-    const dialogueColor = await getCharacterDialogueColor(stChar);
-    if (!dialogueColor) {
-        return null;
-    }
-
-    const hsl = dialogueColor.toHsl();
-    //hsl.s = 0.5;
-    hsl.l = extSettings.chatBubbleLightness;
-
-    return ExColor.fromHsl(hsl);
-}
-
-/**
- * 
  * @param {string} textboxValue 
  * @param {any} defaultValue 
  * @returns {string | null}
@@ -265,18 +228,20 @@ function getTextValidHexOrDefault(textboxValue, defaultValue) {
 }
 
 /**
+ * Adds author UID attribute to a message element.
  * 
  * @param {HTMLElement} message 
  */
 function addAuthorUidClassToMessage(message) {
-    const authorChatUidAttr = "xdc-author_uid";
+    const authorChatUidAttr = "sdc-author_uid";
     if (message.hasAttribute(authorChatUidAttr)) {
-        console.debug(`[XDC] Message already has '${authorChatUidAttr}' attribute, skipping.`);
+        console.debug(`[SDC] Message already has '${authorChatUidAttr}' attribute, skipping.`);
+        return;
     }
 
     const messageAuthorChar = getMessageAuthor(message);
     if (!messageAuthorChar) {
-        console.error("[XDC] Couldn't get message author character to add class.");
+        console.error("[SDC] Couldn't get message author character to add attribute.");
         return;
     }
 
@@ -306,7 +271,7 @@ async function onAnySettingsUpdated() {
  * @param {STCharacter} char 
  */
 function onCharacterChanged(char) {
-    const colorOverride = document.getElementById("xdc-char_color_override");
+    const colorOverride = document.getElementById("sdc-char_color_override");
     setInputColorPickerComboValue(colorOverride, extSettings.charColorSettings.colorOverrides[char.avatarName]);
 }
 
@@ -315,7 +280,7 @@ function onCharacterChanged(char) {
  * @param {STCharacter} persona 
  */
 function onPersonaChanged(persona) {
-    const colorOverride = document.getElementById("xdc-persona_color_override");
+    const colorOverride = document.getElementById("sdc-persona_color_override");
     setInputColorPickerComboValue(colorOverride, extSettings.personaColorSettings.colorOverrides[persona.avatarName]);
 }
 
@@ -324,8 +289,8 @@ function onPersonaChanged(persona) {
 //#region Initialization
 
 function initializeStyleSheets() {
-    charactersStyleSheet = createAndAppendStyleSheet("xdc-chars_style_sheet");
-    personasStyleSheet = createAndAppendStyleSheet("xdc-personas_style_sheet");
+    charactersStyleSheet = createAndAppendStyleSheet("sdc-chars_style_sheet");
+    personasStyleSheet = createAndAppendStyleSheet("sdc-personas_style_sheet");
 
     function createAndAppendStyleSheet(id) {
         const styleSheet = document.createElement('style');
@@ -335,41 +300,10 @@ function initializeStyleSheets() {
 }
 
 function initializeSettingsUI() {
-    const elemExtensionSettings = document.getElementById("xdc-extension-settings");
+    const elemExtensionSettings = document.getElementById("sdc-extension-settings");
 
-    const elemGlobalDialogueSettings = elemExtensionSettings.querySelector("#xdc-global_dialogue_settings");
-    const elemColorTargetDropdown = createColorTargetDropdown("xdc-global_colorize_target", (changedEvent) => {
-        const value = $(changedEvent.target).prop("value");
-        extSettings.colorizeTargets = value;
-        onAnySettingsUpdated();
-    });
-    elemGlobalDialogueSettings.children[0].insertAdjacentElement("afterend", elemColorTargetDropdown);
-    $(elemColorTargetDropdown.querySelector('select')).prop("value", extSettings.colorizeTargets);
-
-    const elemChatBubbleLightness = elemGlobalDialogueSettings.querySelector("#xdc-chat_bubble_color_lightness");
-    $(elemChatBubbleLightness)
-        .prop("value", extSettings.chatBubbleLightness)
-        .on('focusout', (event) => {
-            const target = $(event.target);
-            const value = target.prop("value");
-            const numValue = parseFloat(value);
-            if (Number.isNaN(numValue)) {
-                const lastValidValue = target.prop("lastValidValue") || extSettings.chatBubbleLightness;
-                target.prop("value", lastValidValue);
-                return;
-            }
-
-            const resultValue = numValue < 0.0 ? 0.0 
-                : numValue > 1.0 ? 1.0 
-                : numValue;
-
-            target.prop("value", resultValue);
-            extSettings.chatBubbleLightness = resultValue;
-            onAnySettingsUpdated();
-        });
-
-    const charDialogueSettings = elemExtensionSettings.querySelector("#xdc-char_dialogue_settings");
-    const charColorSourceDropdown = createColorSourceDropdown("xdc-char_colorize_source", (changedEvent) => {
+    const charDialogueSettings = elemExtensionSettings.querySelector("#sdc-char_dialogue_settings");
+    const charColorSourceDropdown = createColorSourceDropdown("sdc-char_colorize_source", (changedEvent) => {
         const value = $(changedEvent.target).prop("value");
         extSettings.charColorSettings.colorizeSource = value;
         onCharacterSettingsUpdated();
@@ -382,7 +316,7 @@ function initializeSettingsUI() {
         }
     );
     charDialogueSettings.children[0].insertAdjacentElement("afterend", charColorSourceDropdown);
-    charDialogueSettings.children[3].insertAdjacentElement("beforeend", charStaticColorPickerCombo);
+    charDialogueSettings.children[2].insertAdjacentElement("beforeend", charStaticColorPickerCombo);
 
     $(charColorSourceDropdown.querySelector('select'))
         .prop("value", extSettings.charColorSettings.colorizeSource)
@@ -391,8 +325,8 @@ function initializeSettingsUI() {
         .prop("value", extSettings.charColorSettings.staticColor)
         .trigger('focusout');
 
-    const personaDialogueSettings = elemExtensionSettings.querySelector("#xdc-persona_dialogue_settings");
-    const personaColorSourceDropdown = createColorSourceDropdown("xdc-persona_colorize_source", (changedEvent) => {
+    const personaDialogueSettings = elemExtensionSettings.querySelector("#sdc-persona_dialogue_settings");
+    const personaColorSourceDropdown = createColorSourceDropdown("sdc-persona_colorize_source", (changedEvent) => {
         const value = $(changedEvent.target).prop("value");
         extSettings.personaColorSettings.colorizeSource = value;
         onPersonaSettingsUpdated();
@@ -406,7 +340,7 @@ function initializeSettingsUI() {
         }
     );
     personaDialogueSettings.children[0].insertAdjacentElement("afterend", personaColorSourceDropdown);
-    personaDialogueSettings.children[3].insertAdjacentElement("beforeend", personaStaticColorPickerCombo);
+    personaDialogueSettings.children[2].insertAdjacentElement("beforeend", personaStaticColorPickerCombo);
     
     $(personaColorSourceDropdown.querySelector('select'))
         .prop("value", extSettings.personaColorSettings.colorizeSource)
@@ -418,14 +352,14 @@ function initializeSettingsUI() {
 
 function initializeCharSpecificUI() {
     // Character
-    const elemCharColorOverride = createColorOverrideElem("xdc-char_color_override", getCharacterBeingEdited);
+    const elemCharColorOverride = createColorOverrideElem("sdc-char_color_override", getCharacterBeingEdited);
 
     const elemCharCardForm = document.getElementById("form_create");
     const elemAvatarNameBlock = elemCharCardForm.querySelector("div#avatar-and-name-block");
     elemAvatarNameBlock.insertAdjacentElement("afterend", elemCharColorOverride);
 
     // Persona
-    const elemPersonaColorOverride = createColorOverrideElem("xdc-persona_color_override", getCurrentPersona);
+    const elemPersonaColorOverride = createColorOverrideElem("sdc-persona_color_override", getCurrentPersona);
     elemPersonaColorOverride.removeChild(elemPersonaColorOverride.querySelector("hr.sysHR")); // eh
 
     const elemPersonaDescription = document.getElementById("persona_description");
