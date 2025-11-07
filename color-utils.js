@@ -12,7 +12,7 @@ export const Vibrant = window["Vibrant"];
  */
 export async function getImageVibrant(image) {
     const loadedImage = await waitForImage(image);
-    return new Vibrant(loadedImage, 96, 6);
+    return new Vibrant(loadedImage, 96, 8); // Increased from 6 to 8 for more color options
 }
 
 /**
@@ -44,17 +44,20 @@ export async function getSmartAvatarColor(image) {
     const vibrant = await getImageVibrant(image);
     const swatches = vibrant.swatches();
     
-    // Try different swatches in order of preference
-    const swatch = getValidSwatch(swatches, "Vibrant", "DarkVibrant", "LightVibrant", "Muted", "DarkMuted", "LightMuted");
+    // Try different swatches in order of preference, testing each for quality
+    const swatchPriority = ["Vibrant", "DarkVibrant", "LightVibrant", "Muted", "DarkMuted", "LightMuted"];
     
-    if (swatch) {
-        const rgb = swatch.getRgb();
-        if (isColorQualityGood(rgb)) {
-            return rgb;
+    for (const swatchName of swatchPriority) {
+        const swatch = swatches[swatchName];
+        if (swatch) {
+            const rgb = swatch.getRgb();
+            if (isColorQualityGood(rgb)) {
+                return rgb;
+            }
         }
     }
     
-    // If no good swatch found, calculate average color from palette
+    // If no good swatch found after trying all, calculate average color from palette
     return getAverageColorFromSwatches(swatches);
 }
 
@@ -90,7 +93,8 @@ function isColorQualityGood(rgb) {
 }
 
 /**
- * Gets average color from all available swatches.
+ * Gets average color from all available swatches, weighted by population.
+ * This favors more dominant colors in the image.
  * 
  * @param {VibrantSwatches} swatches
  * @returns {[number, number, number]?}
@@ -103,19 +107,27 @@ function getAverageColorFromSwatches(swatches) {
     }
     
     let totalR = 0, totalG = 0, totalB = 0;
-    let count = 0;
+    let totalPopulation = 0;
     
+    // Weight each color by its population (how many pixels have this color)
     for (const swatch of validSwatches) {
         const [r, g, b] = swatch.getRgb();
-        totalR += r;
-        totalG += g;
-        totalB += b;
-        count++;
+        const population = swatch.getPopulation() || 1; // Fallback to 1 if undefined
+        
+        totalR += r * population;
+        totalG += g * population;
+        totalB += b * population;
+        totalPopulation += population;
+    }
+    
+    // Avoid division by zero
+    if (totalPopulation === 0) {
+        totalPopulation = 1;
     }
     
     return [
-        Math.round(totalR / count),
-        Math.round(totalG / count),
-        Math.round(totalB / count)
+        Math.round(totalR / totalPopulation),
+        Math.round(totalG / totalPopulation),
+        Math.round(totalB / totalPopulation)
     ];
 }

@@ -194,7 +194,53 @@ function makeBetterContrast(rgb, satAdjust = 0, lumAdjust = 0) {
     return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
 }
 
+const MAX_CACHE_SIZE = 100; // Prevent memory issues with many characters
 let avatarColorCache = {};
+let cacheInsertionOrder = []; // Track insertion order for LRU eviction
+
+/**
+ * Enforces the maximum cache size by removing oldest entries
+ */
+function enforceCacheLimit() {
+    if (Object.keys(avatarColorCache).length > MAX_CACHE_SIZE) {
+        // Remove oldest 20% of entries to avoid frequent cleanup
+        const entriesToRemove = Math.floor(MAX_CACHE_SIZE * 0.2);
+        for (let i = 0; i < entriesToRemove && cacheInsertionOrder.length > 0; i++) {
+            const oldestKey = cacheInsertionOrder.shift();
+            delete avatarColorCache[oldestKey];
+        }
+    }
+}
+
+/**
+ * Adds an entry to the cache with size enforcement
+ * @param {string} key 
+ * @param {ExColor} value 
+ */
+function addToCache(key, value) {
+    avatarColorCache[key] = value;
+    cacheInsertionOrder.push(key);
+    enforceCacheLimit();
+}
+
+/**
+ * Clears the cache for a specific character type only
+ * @param {CharacterType} charType 
+ */
+function clearCacheForCharType(charType) {
+    const prefix = `${charType}|`;
+    Object.keys(avatarColorCache).forEach(key => {
+        if (key.startsWith(prefix)) {
+            delete avatarColorCache[key];
+            // Remove from insertion order tracking
+            const index = cacheInsertionOrder.indexOf(key);
+            if (index > -1) {
+                cacheInsertionOrder.splice(index, 1);
+            }
+        }
+    });
+}
+
 /**
  * Gets the dialogue color for a character using smart color extraction.
  * 
@@ -217,20 +263,28 @@ async function getCharacterDialogueColor(stChar) {
                 return avatarColorCache[cacheKey];
             }
             
-            const avatar = stChar.getAvatarImageThumbnail();
-            const colorRgb = await getSmartAvatarColor(avatar);
-            const betterContrastRgb = colorRgb 
-                ? makeBetterContrast(
-                    colorRgb, 
-                    colorSettings.saturationAdjustment || 0,
-                    colorSettings.lightnessAdjustment || 0
-                  )
-                : DEFAULT_STATIC_DIALOGUE_COLOR_RGB;
-            const exColor = ExColor.fromRgb(betterContrastRgb);
-            
-            // Cache the result
-            avatarColorCache[cacheKey] = exColor;
-            return exColor;
+            try {
+                const avatar = stChar.getAvatarImageThumbnail();
+                const colorRgb = await getSmartAvatarColor(avatar);
+                const betterContrastRgb = colorRgb 
+                    ? makeBetterContrast(
+                        colorRgb, 
+                        colorSettings.saturationAdjustment || 0,
+                        colorSettings.lightnessAdjustment || 0
+                      )
+                    : DEFAULT_STATIC_DIALOGUE_COLOR_RGB;
+                const exColor = ExColor.fromRgb(betterContrastRgb);
+                
+                // Cache the result with size enforcement
+                addToCache(cacheKey, exColor);
+                return exColor;
+            } catch (error) {
+                console.warn(`[SDC] Failed to extract color from avatar for ${stChar.uid}:`, error);
+                // Return default color on error
+                const exColor = ExColor.fromRgb(DEFAULT_STATIC_DIALOGUE_COLOR_RGB);
+                addToCache(cacheKey, exColor); // Cache the fallback too
+                return exColor;
+            }
         }
         case ColorizeSourceType.STATIC_COLOR: {
             return ExColor.fromHex(colorSettings.staticColor);
@@ -379,7 +433,7 @@ function initializeSettingsUI() {
         extSettings.charColorSettings.saturationAdjustment || 0,
         (value) => {
             extSettings.charColorSettings.saturationAdjustment = value;
-            avatarColorCache = {}; // Clear cache when adjustments change
+            clearCacheForCharType(CharacterType.CHARACTER); // Clear only character cache
             onCharacterSettingsUpdated();
         }
     );
@@ -393,7 +447,7 @@ function initializeSettingsUI() {
         extSettings.charColorSettings.lightnessAdjustment || 0,
         (value) => {
             extSettings.charColorSettings.lightnessAdjustment = value;
-            avatarColorCache = {}; // Clear cache when adjustments change
+            clearCacheForCharType(CharacterType.CHARACTER); // Clear only character cache
             onCharacterSettingsUpdated();
         }
     );
@@ -452,7 +506,7 @@ function initializeSettingsUI() {
         extSettings.personaColorSettings.saturationAdjustment || 0,
         (value) => {
             extSettings.personaColorSettings.saturationAdjustment = value;
-            avatarColorCache = {}; // Clear cache when adjustments change
+            clearCacheForCharType(CharacterType.PERSONA); // Clear only persona cache
             onPersonaSettingsUpdated();
         }
     );
@@ -466,7 +520,7 @@ function initializeSettingsUI() {
         extSettings.personaColorSettings.lightnessAdjustment || 0,
         (value) => {
             extSettings.personaColorSettings.lightnessAdjustment = value;
-            avatarColorCache = {}; // Clear cache when adjustments change
+            clearCacheForCharType(CharacterType.PERSONA); // Clear only persona cache
             onPersonaSettingsUpdated();
         }
     );
