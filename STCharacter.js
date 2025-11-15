@@ -151,7 +151,6 @@ export class STCharacter {
  * @returns {string}
  */
 function getAvatarFileNameFromCharName(charType, name) {
-    let avatarFileName;
     switch (charType) {
         case CharacterType.CHARACTER: {
             const character = getContext().characters.find(char => char.name === name);
@@ -159,25 +158,23 @@ function getAvatarFileNameFromCharName(charType, name) {
                 throw new Error(`Couldn't find '${name}' in character list; is the character list initialized?`);
             }
 
-            avatarFileName = character.avatar;
+            return character.avatar;
         }
         case CharacterType.PERSONA: {
             const personaId = Object.keys(power_user.personas).find(avatarId => power_user.personas[avatarId] === name);
             if (!personaId) {
-                throw new Error(`Couldn't find '${name}' in persona list.`)
+                throw new Error(`Couldn't find '${name}' in persona list.`);
             }
 
-            avatarFileName = personaId;
+            return personaId;
         }
         case CharacterType.SYSTEM: {
-            avatarFileName = SYSTEM_AVATAR_PATH;
+            return SYSTEM_AVATAR_PATH;
         }
         default: {
             throw new Error(`Invalid character type '${charType}'.`);
         }
     }
-
-    return avatarFileName;
 }
 
 /**

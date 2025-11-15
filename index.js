@@ -63,6 +63,20 @@ const extName = "SillyTavern-Smart-Dialogue-Colorizer";
 const extFolderPath = `scripts/extensions/third-party/${extName}`;
 const extSettings = initializeSettings(extName, defaultExtSettings);
 
+function debounce(fn, delay = 100) {
+    /** @type {number?} */
+    let timeoutId = null;
+    return function debounced(...args) {
+        if (timeoutId !== null) {
+            clearTimeout(timeoutId);
+        }
+
+        timeoutId = window.setTimeout(() => {
+            fn.apply(this, args);
+        }, delay);
+    };
+}
+
 /** @type {HTMLStyleElement} */
 let charactersStyleSheet;
 /** @type {HTMLStyleElement} */
@@ -199,6 +213,18 @@ let avatarColorCache = {};
 let cacheInsertionOrder = []; // Track insertion order for LRU eviction
 
 /**
+ * Removes the specified cache entry and keeps insertion tracking in sync.
+ * @param {string} cacheKey
+ */
+function removeCacheEntry(cacheKey) {
+    delete avatarColorCache[cacheKey];
+    const index = cacheInsertionOrder.indexOf(cacheKey);
+    if (index > -1) {
+        cacheInsertionOrder.splice(index, 1);
+    }
+}
+
+/**
  * Enforces the maximum cache size by removing oldest entries
  */
 function enforceCacheLimit() {
@@ -231,12 +257,20 @@ function clearCacheForCharType(charType) {
     const prefix = `${charType}|`;
     Object.keys(avatarColorCache).forEach(key => {
         if (key.startsWith(prefix)) {
-            delete avatarColorCache[key];
-            // Remove from insertion order tracking
-            const index = cacheInsertionOrder.indexOf(key);
-            if (index > -1) {
-                cacheInsertionOrder.splice(index, 1);
-            }
+            removeCacheEntry(key);
+        }
+    });
+}
+
+/**
+ * Clears cached colors for a specific character (all adjustment variants).
+ * @param {STCharacter} stChar
+ */
+function clearCacheForCharacter(stChar) {
+    const prefix = `${stChar.uid}_`;
+    Object.keys(avatarColorCache).forEach(key => {
+        if (key.startsWith(prefix)) {
+            removeCacheEntry(key);
         }
     });
 }
@@ -334,22 +368,45 @@ function addAuthorUidClassToMessage(message) {
     message.setAttribute(authorChatUidAttr, messageAuthorChar.uid);
 }
 
+function addAuthorUidToExistingMessages() {
+    const chatElem = document.getElementById("chat");
+    if (!chatElem) {
+        return;
+    }
+
+    chatElem.querySelectorAll(":scope > .mes").forEach((message) => {
+        addAuthorUidClassToMessage(message);
+    });
+}
+
 //#region Event Handlers
 
-async function onCharacterSettingsUpdated() {
+const scheduleCharacterSettingsRefresh = debounce(async () => {
     await updateCharactersStyleSheet();
     saveSettingsDebounced();
-}
+}, 120);
 
-async function onPersonaSettingsUpdated() {
+const schedulePersonaSettingsRefresh = debounce(async () => {
     await updatePersonasStyleSheet();
     saveSettingsDebounced();
-}
+}, 120);
 
-async function onAnySettingsUpdated() {
+const scheduleAllSettingsRefresh = debounce(async () => {
     await updateCharactersStyleSheet();
     await updatePersonasStyleSheet();
     saveSettingsDebounced();
+}, 120);
+
+function onCharacterSettingsUpdated() {
+    scheduleCharacterSettingsRefresh();
+}
+
+function onPersonaSettingsUpdated() {
+    schedulePersonaSettingsRefresh();
+}
+
+function onAnySettingsUpdated() {
+    scheduleAllSettingsRefresh();
 }
 
 /**
@@ -535,6 +592,74 @@ function initializeSettingsUI() {
         .trigger('focusout');
 }
 
+/**
+ * Adds a button to the Extensions dropdown menu for Smart Dialogue Colorizer
+ * This function creates a menu item in SillyTavern's Extensions dropdown
+ * that scrolls to and opens the extension's settings panel.
+ */
+function addExtensionMenuButton() {
+    // Select the Extensions dropdown menu
+    const extensionsMenu = document.getElementById('extensionsMenu');
+    if (!extensionsMenu) {
+        console.warn('[SDC] Extensions menu not found');
+        return;
+    }
+
+    // Check if button already exists to prevent duplicates
+    if (document.getElementById('sdc-extensions-menu-button')) {
+        return;
+    }
+
+    // Create button element with palette icon and extension name
+    const button = document.createElement('div');
+    button.id = 'sdc-extensions-menu-button';
+    button.className = 'list-group-item flex-container flexGap5 interactable';
+    button.title = 'Open Smart Dialogue Colorizer Settings';
+    button.setAttribute('tabindex', '0');
+    button.innerHTML = `
+        <i class="fa-solid fa-palette"></i>
+        <span>Dialogue Colorizer</span>
+    `;
+
+    // Append to extensions menu
+    extensionsMenu.appendChild(button);
+
+    // Set click handler to scroll to and open the settings
+    button.addEventListener('click', () => {
+        // Find the settings drawer
+        const settingsDrawer = document.getElementById('sdc-extension-settings');
+        if (!settingsDrawer) {
+            console.warn('[SDC] Settings drawer not found');
+            return;
+        }
+
+        // Scroll to the settings
+        settingsDrawer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // Open the drawer if it's not already open
+        const drawerToggle = settingsDrawer.querySelector('.inline-drawer-toggle');
+        const drawerContent = settingsDrawer.querySelector('.inline-drawer-content');
+        const drawerIcon = settingsDrawer.querySelector('.inline-drawer-icon');
+
+        if (drawerToggle && drawerContent && !drawerContent.classList.contains('open')) {
+            drawerToggle.classList.add('open');
+            drawerContent.classList.add('open');
+            if (drawerIcon) {
+                drawerIcon.classList.remove('down');
+                drawerIcon.classList.add('up');
+            }
+        }
+
+        // Brief highlight effect to draw attention
+        settingsDrawer.style.transition = 'background-color 0.3s ease';
+        const originalBg = settingsDrawer.style.backgroundColor;
+        settingsDrawer.style.backgroundColor = 'rgba(var(--SmartThemeBodyColor), 0.3)';
+        setTimeout(() => {
+            settingsDrawer.style.backgroundColor = originalBg;
+        }, 600);
+    });
+}
+
 function initializeCharSpecificUI() {
     // Character
     const elemCharColorOverride = createColorOverrideElem("sdc-char_color_override", getCharacterBeingEdited);
@@ -545,7 +670,6 @@ function initializeCharSpecificUI() {
 
     // Persona
     const elemPersonaColorOverride = createColorOverrideElem("sdc-persona_color_override", getCurrentPersona);
-    elemPersonaColorOverride.removeChild(elemPersonaColorOverride.querySelector("hr.sysHR")); // eh
 
     const elemPersonaDescription = document.getElementById("persona_description");
     const elemDescParent = elemPersonaDescription.parentElement;
@@ -557,17 +681,54 @@ function initializeCharSpecificUI() {
      * @param {() => STCharacter} stCharGetter
      */
     function createColorOverrideElem(id, stCharGetter) {
+        // Create container that matches ST's form structure
+        const wrapper = document.createElement('div');
+        wrapper.id = id;
+        wrapper.className = "sdc-color-override-container";
+
+        // Add subtle separator at top
+        const separator = document.createElement('div');
+        separator.className = "sdc-separator";
+        
+        // Create label row with icon and preview
+        const labelRow = document.createElement('div');
+        labelRow.className = "sdc-label-row";
+        
         const label = document.createElement('label');
-        label.htmlFor = id;
-        label.title = "The color to use for this character's dialogue (quoted text). Overrides the global setting.";
-        label.innerHTML = `Dialogue Color<span class="margin5 fa-solid fa-circle-info opacity50p"></span>`;
-
-        const hr = document.createElement('hr');
-        hr.className = "sysHR";
-
+        label.htmlFor = `${id}-input`;
+        label.className = "sdc-override-label";
+        label.innerHTML = `
+            <span style="font-weight: 500;">Dialogue Color Override</span>
+            <i class="fa-solid fa-circle-info margin5 opacity50p" 
+               title="Set a custom color for this character's dialogue. Leave empty to use global settings."></i>
+        `;
+        
+        // Add a preview swatch that shows current color
+        const previewSwatch = document.createElement('div');
+        previewSwatch.className = "sdc-color-preview";
+        previewSwatch.title = "Current dialogue color preview";
+        
+        labelRow.appendChild(label);
+        labelRow.appendChild(previewSwatch);
+        
+        // Create input row with better layout
+        const inputRow = document.createElement('div');
+        inputRow.className = "sdc-input-row";
+        
         const inputColorPickerCombo = createColorTextPickerCombo(
             (textboxValue) => getTextValidHexOrDefault(textboxValue, ""), 
             (colorValue) => {
+                // Update preview swatch
+                if (colorValue && colorValue.length > 0) {
+                    previewSwatch.style.backgroundColor = colorValue;
+                    previewSwatch.style.borderColor = colorValue;
+                    clearBtn.style.display = "flex";
+                } else {
+                    previewSwatch.style.backgroundColor = "transparent";
+                    previewSwatch.style.borderColor = "var(--SmartThemeBorderColor, #666)";
+                    clearBtn.style.display = "none";
+                }
+                
                 const stChar = stCharGetter();
                 const colorSettings = getSettingsForChar(stChar);
                 if (colorValue.length > 0)
@@ -575,22 +736,53 @@ function initializeCharSpecificUI() {
                 else
                     delete colorSettings.colorOverrides[stChar.avatarName];
 
+                // Clear cache when override changes to ensure fresh colors
+                clearCacheForCharacter(stChar);
+
                 if (stChar.type === CharacterType.PERSONA) {
                     onPersonaSettingsUpdated();
-                }
-                else {
+                } else {
                     onCharacterSettingsUpdated();
                 }
             }
         );
-
-        const wrapper = document.createElement('div');
-        wrapper.id = id;
-        wrapper.className = "dc-flex-container";
-        wrapper.appendChild(hr);
-        wrapper.appendChild(label);
-        wrapper.appendChild(inputColorPickerCombo);
-
+        
+        inputColorPickerCombo.id = `${id}-input`;
+        
+        // Add clear button with icon
+        const clearBtn = document.createElement('button');
+        clearBtn.type = "button";
+        clearBtn.className = "menu_button menu_button_icon sdc-clear-btn";
+        clearBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        clearBtn.title = "Clear color override and use auto-detection";
+        clearBtn.style.display = "none"; // Hidden by default
+        clearBtn.onclick = () => {
+            const textInput = inputColorPickerCombo.querySelector('input[type="text"]');
+            const colorInput = inputColorPickerCombo.querySelector('input[type="color"]');
+            textInput.value = "";
+            colorInput.value = "#000000";
+            textInput.dispatchEvent(new Event('focusout', { bubbles: true }));
+        };
+        
+        inputRow.appendChild(inputColorPickerCombo);
+        inputRow.appendChild(clearBtn);
+        
+        wrapper.appendChild(separator);
+        wrapper.appendChild(labelRow);
+        wrapper.appendChild(inputRow);
+        
+        // Initialize preview with current value if exists
+        setTimeout(() => {
+            const stChar = stCharGetter();
+            const colorSettings = getSettingsForChar(stChar);
+            const currentColor = colorSettings.colorOverrides[stChar.avatarName];
+            if (currentColor) {
+                previewSwatch.style.backgroundColor = currentColor;
+                previewSwatch.style.borderColor = currentColor;
+                clearBtn.style.display = "flex";
+            }
+        }, 100);
+        
         return wrapper;
     }
 }
@@ -605,14 +797,35 @@ jQuery(async ($) => {
     initializeSettingsUI();
     initializeCharSpecificUI();
 
+    // Add extension menu button for quick access to settings
+    addExtensionMenuButton();
+
     eventSource.on(event_types.CHAT_CHANGED, () => updateCharactersStyleSheet());
     expEventSource.on(exp_event_type.MESSAGE_ADDED, addAuthorUidClassToMessage);
 
-    expEventSource.on(exp_event_type.CHAR_CARD_CHANGED, onCharacterChanged);
-    expEventSource.on(exp_event_type.PERSONA_CHANGED, onPersonaChanged);
+    expEventSource.on(exp_event_type.CHAR_CARD_CHANGED, (char) => {
+        onCharacterChanged(char);
+        clearCacheForCharacter(char);
+        updateCharactersStyleSheet();
+    });
+    expEventSource.on(exp_event_type.PERSONA_CHANGED, (persona) => {
+        onPersonaChanged(persona);
+        clearCacheForCharacter(persona);
+        updatePersonasStyleSheet();
+    });
+    expEventSource.on(exp_event_type.PERSONA_ADDED, (persona) => {
+        clearCacheForCharacter(persona);
+        updatePersonasStyleSheet();
+    });
+    expEventSource.on(exp_event_type.PERSONA_REMOVED, (persona) => {
+        clearCacheForCharacter(persona);
+        updatePersonasStyleSheet();
+    });
     
     eventSource.once(event_types.APP_READY, () => {
         onPersonaChanged(getCurrentPersona()); // Initialize color inputs with starting values.
+        addAuthorUidToExistingMessages();
+        updateCharactersStyleSheet();
         updatePersonasStyleSheet();
     });
 })

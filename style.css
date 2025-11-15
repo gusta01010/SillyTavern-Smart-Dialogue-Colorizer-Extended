@@ -13,12 +13,17 @@
     margin-bottom: 4px;
 }
 
-.sdc-extension-settings .dc-color-input-combo {
+/* Color input combo - shared between settings and character editor */
+.sdc-extension-settings .dc-color-input-combo,
+.sdc-color-override-container .dc-color-input-combo {
     display: flex;
     align-items: center;
+    flex: 1;
 }
 
-.sdc-extension-settings .dc-color-picker {
+/* Color picker styles - shared between settings and character editor */
+.sdc-extension-settings .dc-color-picker,
+.sdc-color-override-container .dc-color-picker {
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
@@ -29,7 +34,8 @@
     margin: -25%;
 }
 
-.sdc-extension-settings .dc-color-picker-wrapper {
+.sdc-extension-settings .dc-color-picker-wrapper,
+.sdc-color-override-container .dc-color-picker-wrapper {
     overflow: hidden;
     width: 1.5em;
     height: 1.5em;
@@ -39,12 +45,16 @@
 }
 
 .sdc-extension-settings .dc-color-picker::-webkit-color-swatch-wrapper, 
-.sdc-extension-settings .dc-color-picker::-moz-color-swatch-wrapper {
+.sdc-extension-settings .dc-color-picker::-moz-color-swatch-wrapper,
+.sdc-color-override-container .dc-color-picker::-webkit-color-swatch-wrapper,
+.sdc-color-override-container .dc-color-picker::-moz-color-swatch-wrapper {
 	padding: 0;
 }
 
 .sdc-extension-settings .dc-color-picker::-webkit-color-swatch, 
-.sdc-extension-settings .dc-color-picker::-moz-color-swatch {
+.sdc-extension-settings .dc-color-picker::-moz-color-swatch,
+.sdc-color-override-container .dc-color-picker::-webkit-color-swatch,
+.sdc-color-override-container .dc-color-picker::-moz-color-swatch {
 	border: none;
 }
 
@@ -105,4 +115,73 @@
     display: block;
     margin-bottom: 8px;
     font-size: 0.95em;
+}
+
+/* Character/Persona Color Override Styles */
+.sdc-color-override-container {
+    margin-top: 12px;
+    margin-bottom: 12px;
+    padding: 12px 0;
+}
+
+.sdc-separator {
+    height: 1px;
+    background: var(--SmartThemeBorderColor, #444);
+    margin: 0 0 12px 0;
+    opacity: 0.3;
+}
+
+.sdc-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.sdc-override-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    cursor: default;
+}
+
+.sdc-color-preview {
+    width: 28px;
+    height: 28px;
+    border: 2px solid var(--SmartThemeBorderColor, #666);
+    border-radius: 6px;
+    background-color: transparent;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.sdc-color-preview:hover {
+    transform: scale(1.05);
+}
+
+.sdc-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.sdc-clear-btn {
+    flex-shrink: 0;
+    min-width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.sdc-clear-btn:hover {
+    background-color: var(--SmartThemeQuoteColor, rgba(255, 100, 100, 0.2));
+    transform: scale(1.05);
+}
+
+.sdc-clear-btn i {
+    font-size: 1.1em;
 }
