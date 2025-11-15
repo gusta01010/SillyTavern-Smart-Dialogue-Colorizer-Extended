@@ -1,6 +1,9 @@
-# Smart Dialogue Colorizer
+# Smart Dialogue Colorizer Extended
 
-An improved SillyTavern extension that automatically colors dialogue quotes based on character avatars with intelligent color extraction and quality filtering.
+An extended and actively maintained fork of [Smart Dialogue Colorizer](https://github.com/b4bysw0rld/SillyTavern-Smart-Dialogue-Colorizer).
+
+
+A SillyTavern extension that automatically colors dialogue quotes based on character avatars with intelligent color extraction and quality filtering.
 
 ## ✨ Features
 
@@ -52,13 +55,13 @@ div.mes .mesIDDisplay:not(:empty) {
 
 Alternatively, manually place the extension folder in:
 ```
-SillyTavern/public/scripts/extensions/third-party/Smart-Dialogue-Colorizer/
+SillyTavern/public/scripts/extensions/third-party/Smart-Dialogue-Colorizer-Extended/
 ```
 
 ## 🎨 Usage
 
 1. Open **Extensions** panel in SillyTavern
-2. Find **Smart Dialogue Colorizer** settings
+2. Find **Smart Dialogue Colorizer Extended** settings
 3. Configure:
    - **Character Dialogue Settings**: How character quotes are colored
    - **Persona Dialogue Settings**: How your persona's quotes are colored
@@ -79,9 +82,10 @@ In the Character Editor or Persona settings, you'll find a "Dialogue Color" fiel
 
 ## 🆚 Improvements Over Original
 
+- This fork maintains a simpler, more flexible options approach. 
 - More reliable color extraction that works with a wider variety of avatars
 - Smart fallback system prevents failures when vibrant colors aren't available
-- Better contrast algorithm ensures readability
+- Revamped contrast and lightness algorithm that ensures readability
 - Quality filtering removes poor color choices
 - Simplified UI focused on quoted text (no chat bubble complexity)
 - Cleaner codebase with better performance
