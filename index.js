@@ -144,10 +144,12 @@ async function onCharacterSettingsUpdated() { await updateCharactersStyleSheet()
 async function onPersonaSettingsUpdated() { await updatePersonasStyleSheet(); saveSettingsDebounced(); }
 function onCharacterChanged(char) {
     const override = document.getElementById("sdc-char_color_override");
+    if (!override) return; // if the element doesn't exist, just stop here.
     setInputColorPickerComboValue(override, extSettings.charColorSettings.colorOverrides[char.avatarName]);
 }
 function onPersonaChanged(persona) {
     const override = document.getElementById("sdc-persona_color_override");
+    if (!override) return; // If the element doesn't exist, just stop here.
     setInputColorPickerComboValue(override, extSettings.personaColorSettings.colorOverrides[persona.avatarName]);
 }
 
@@ -242,41 +244,12 @@ function initializeSettingsUI() {
     createSettingsSection('persona', true);
 }
 
-function initializeCharSpecificUI() {
-    const createOverrideElem = (id, getter) => {
-        const wrapper = document.createElement('div');
-        wrapper.id = id;
-        wrapper.className = "dc-flex-container";
-        const hr = document.createElement('hr');
-        hr.className = "sysHR";
-        const label = document.createElement('label');
-        label.htmlFor = id;
-        label.title = "Overrides the global dialogue color setting for this character.";
-        label.innerHTML = `Dialogue Color<span class="margin5 fa-solid fa-circle-info opacity50p"></span>`;
-        const picker = createColorTextPickerCombo(val => getTextValidHexOrDefault(val, ""), color => {
-            const char = getter();
-            const settings = getSettingsForChar(char);
-            if (color) settings.colorOverrides[char.avatarName] = color;
-            else delete settings.colorOverrides[char.avatarName];
-            if (char.type === CharacterType.PERSONA) onPersonaSettingsUpdated();
-            else onCharacterSettingsUpdated();
-        });
-        wrapper.append(hr, label, picker);
-        return wrapper;
-    };
-    const charOverride = createOverrideElem("sdc-char_color_override", getCharacterBeingEdited);
-    document.getElementById("avatar-and-name-block").insertAdjacentElement("afterend", charOverride);
-    const personaOverride = createOverrideElem("sdc-persona_color_override", getCurrentPersona);
-    personaOverride.removeChild(personaOverride.querySelector("hr.sysHR"));
-    document.getElementById("persona_description").parentElement.insertAdjacentElement("afterbegin", personaOverride);
-}
 
 jQuery(async ($) => {
     const settingsHtml = await $.get(`${extFolderPath}/dialogue-colorizer.html`);
     $("#extensions_settings2").append(settingsHtml);
     initializeStyleSheets();
     initializeSettingsUI();
-    initializeCharSpecificUI();
     eventSource.on(event_types.CHAT_CHANGED, () => updateCharactersStyleSheet());
     expEventSource.on(exp_event_type.MESSAGE_ADDED, addAuthorUidClassToMessage);
     expEventSource.on(exp_event_type.CHAR_CARD_CHANGED, onCharacterChanged);
