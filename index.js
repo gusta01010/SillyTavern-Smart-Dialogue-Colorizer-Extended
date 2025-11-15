@@ -1,41 +1,29 @@
-//#region ST imports
 
 import { eventSource, event_types, saveSettingsDebounced } from "../../../../script.js";
-import { extension_settings } from "../../../extensions.js";
-
-//#endregion ST imports
-
-//#region Local imports
 
 import { ExColor } from "./ExColor.js";
 import { CharacterType, STCharacter } from "./STCharacter.js";
-import { getSmartAvatarColor } from "./color-utils.js";
-import { createColorSourceDropdown, createColorTextPickerCombo, createSliderWithLabel, createCheckboxWithLabel } from "./element-creators.js";
+import { getSmartAvatarColor, getNarrationColor } from "./color-utils.js";
+import { createColorSourceDropdown, createColorTextPickerCombo, createCheckboxWithLabel } from "./element-creators.js";
 import { initializeSettings } from "./settings-utils.js";
-import { 
-    expEventSource, 
-    exp_event_type, 
-    getAllPersonas, 
-    getCharacterBeingEdited, 
-    getCurrentCharacter, 
-    getCurrentGroupCharacters, 
-    getCurrentPersona, 
-    getMessageAuthor, 
-    isInAnyChat, 
-    isInCharacterChat, 
-    isInGroupChat } from "./st-utils.js";
+import {
+    expEventSource,
+    exp_event_type,
+    getAllPersonas,
+    getCharacterBeingEdited,
+    getCurrentCharacter,
+    getCurrentGroupCharacters,
+    getCurrentPersona,
+    getMessageAuthor,
+    isInAnyChat,
+    isInCharacterChat,
+    isInGroupChat
+} from "./st-utils.js";
 import { setInputColorPickerComboValue } from "./utils.js";
 
-//#endregion Local imports
-
 const DEFAULT_STATIC_DIALOGUE_COLOR_HEX = "#e18a24";
-/** @type {[number, number, number]} */
 const DEFAULT_STATIC_DIALOGUE_COLOR_RGB = [225, 138, 36];
 
-/**
- * @typedef {ValueOf<typeof ColorizeSourceType>} ColorizeSourceType
- * @readonly
- */
 export const ColorizeSourceType = {
     AVATAR_SMART: "avatar_smart",
     CHAR_COLOR_OVERRIDE: "char_color_override",
@@ -43,791 +31,262 @@ export const ColorizeSourceType = {
     DISABLED: "disabled"
 };
 
-/**
- * @typedef {defaultExtSettings} SDCSettings
- */
 const defaultCharColorSettings = {
-    colorizeSource: ColorizeSourceType.AVATAR_SMART,
-    staticColor: DEFAULT_STATIC_DIALOGUE_COLOR_HEX,
     colorOverrides: {},
     colorNameText: false,
-    saturationAdjustment: 0,
-    lightnessAdjustment: 0,
-};
-const defaultExtSettings = {
-    charColorSettings: defaultCharColorSettings,
-    personaColorSettings: defaultCharColorSettings,
+    quotationColorSource: "Vibrant",
+    narrationRawColorSource: "disabled",
+    narrationItalicColorSource: "disabled",
+    narrationBoldColorSource: "disabled",
 };
 
-const extName = "SillyTavern-Smart-Dialogue-Colorizer";
+const defaultExtSettings = {
+    charColorSettings: structuredClone(defaultCharColorSettings),
+    personaColorSettings: structuredClone(defaultCharColorSettings),
+};
+
+const extName = "SillyTavern-Smart-Dialogue-Colorizer-Extended";
 const extFolderPath = `scripts/extensions/third-party/${extName}`;
 const extSettings = initializeSettings(extName, defaultExtSettings);
 
-function debounce(fn, delay = 100) {
-    /** @type {number?} */
-    let timeoutId = null;
-    return function debounced(...args) {
-        if (timeoutId !== null) {
-            clearTimeout(timeoutId);
-        }
-
-        timeoutId = window.setTimeout(() => {
-            fn.apply(this, args);
-        }, delay);
-    };
-}
-
-/** @type {HTMLStyleElement} */
 let charactersStyleSheet;
-/** @type {HTMLStyleElement} */
 let personasStyleSheet;
 
-/**
- * @param {STCharacter} stChar
- */
 async function getCharStyleString(stChar) {
     let styleHtml = "";
-    const dialogueColor = await getCharacterDialogueColor(stChar);
     const colorSettings = getSettingsForChar(stChar);
+    const msgSelector = `.mes[sdc-author_uid="${stChar.uid}"]`;
+    const avatar = stChar.getAvatarImage(); //gets more accurately without Thumbnail, however, it's slower.
 
-    if (dialogueColor) {
+    const quotationRgb = await getNarrationColor(avatar, colorSettings.quotationColorSource);
+    if (quotationRgb) {
+        const quotationColor = ExColor.fromRgb(quotationRgb);
+        const hexColor = `#${quotationColor.toHex()}`;
+
         styleHtml += `
-            .mes[sdc-author_uid="${stChar.uid}"] {
-                --character-color: #${dialogueColor.toHex()};
-            }
-            .mes[sdc-author_uid="${stChar.uid}"] .mes_text q {
-                color: var(--character-color);
-            }
+            ${msgSelector} .mes_text q { color: ${hexColor} !important; }
         `;
-        
-        // Apply color to character name if enabled
+
         if (colorSettings.colorNameText) {
             styleHtml += `
-            .mes[sdc-author_uid="${stChar.uid}"] .name_text {
-                color: var(--character-color);
-            }
-        `;
+                ${msgSelector} .name_text { color: ${hexColor} !important; }
+            `;
         }
+    }
+
+    const rawNarrationRgb = await getNarrationColor(avatar, colorSettings.narrationRawColorSource);
+    if (rawNarrationRgb) {
+        const rawNarrationColor = ExColor.fromRgb(rawNarrationRgb);
+        const hexColor = `#${rawNarrationColor.toHex()}`;
+        
+        styleHtml += `
+            ${msgSelector} .mes_text { color: ${hexColor} !important; }
+        `;
+    }
+
+    const italicRgb = await getNarrationColor(avatar, colorSettings.narrationItalicColorSource);
+    if (italicRgb) {
+        const italicColor = ExColor.fromRgb(italicRgb);
+        styleHtml += `
+            ${msgSelector} .mes_text em, ${msgSelector} .mes_text i { color: #${italicColor.toHex()} !important; }
+        `;
+    }
+
+    const boldRgb = await getNarrationColor(avatar, colorSettings.narrationBoldColorSource);
+    if (boldRgb) {
+        const boldColor = ExColor.fromRgb(boldRgb);
+        styleHtml += `
+            ${msgSelector} .mes_text strong, ${msgSelector} .mes_text b { color: #${boldColor.toHex()} !important; }
+        `;
     }
 
     return styleHtml;
 }
 
-/**
- * 
- * @param {STCharacter[]=} characterList 
- */
 async function updateCharactersStyleSheet(characterList) {
     if (!characterList) {
-        if (!isInAnyChat()) {
-            return;
-        }
-        if (isInGroupChat()) {
-            characterList = getCurrentGroupCharacters();
-        }
-        else if (isInCharacterChat()) {
-            characterList = [getCurrentCharacter()];
-        }
+        if (!isInAnyChat()) return;
+        if (isInGroupChat()) characterList = getCurrentGroupCharacters();
+        else if (isInCharacterChat()) characterList = [getCurrentCharacter()];
     }
-
-    const stylesHtml = await Promise.all(characterList.map(async char => await getCharStyleString(char)));
+    const stylesHtml = await Promise.all(characterList.map(char => getCharStyleString(char)));
     charactersStyleSheet.innerHTML = stylesHtml.join("");
 }
 
-// Handled differently from the chars style sheet so we don't have to do any dirty/complex tricks when a chat has messages
-// from a persona the user isn't currently using (otherwise the message color would revert to the default).
-/**
- * 
- * @param {STCharacter[]=} personaList 
- */
 async function updatePersonasStyleSheet(personaList) {
     personaList ??= getAllPersonas();
-
-    const stylesHtml = await Promise.all(personaList.map(async persona => await getCharStyleString(persona)));
+    const stylesHtml = await Promise.all(personaList.map(persona => getCharStyleString(persona)));
     personasStyleSheet.innerHTML = stylesHtml.join("");
 }
 
-/**
- * 
- * @param {STCharacter | CharacterType} charType 
- */
 function getSettingsForChar(charType) {
-    if (charType instanceof STCharacter) {
-        charType = charType.type;
-    }
-    
+    if (charType instanceof STCharacter) charType = charType.type;
     switch (charType) {
-        case CharacterType.CHARACTER:
-            return extSettings.charColorSettings;
-        case CharacterType.PERSONA:
-            return extSettings.personaColorSettings;
-        default:
-            console.warn(`Character type '${charType}' has no settings key, using defaults.`);
-            return structuredClone(defaultCharColorSettings);
+        case CharacterType.CHARACTER: return extSettings.charColorSettings;
+        case CharacterType.PERSONA: return extSettings.personaColorSettings;
+        default: return structuredClone(defaultCharColorSettings);
     }
 }
 
-/**
- * Improves color contrast for better readability on dark backgrounds.
- * Ensures adequate saturation and luminance while preserving hue.
- * Applies global color adjustments.
- * 
- * @param {import("./ExColor.js").ColorArray} rgb 
- * @param {number} satAdjust - Saturation adjustment (0 to 10)
- * @param {number} lumAdjust - Brightness adjustment (0 to 10)
- * @returns {import("./ExColor.js").ColorArray}
- */
-function makeBetterContrast(rgb, satAdjust = 0, lumAdjust = 0) {
-    const [h, s, l, a] = ExColor.rgb2hsl(rgb);
-
-    let nHue = h;
-    let nSat = s;
-    let nLum = l;
-
-    // Ensure minimum saturation for vibrancy
-    if (nSat < 0.4) {
-        nSat = Math.min(nSat + 0.3, 0.8);
-    }
-
-    // Ensure luminance is in readable range (not too dark, not too bright)
-    if (nLum < 0.5) {
-        nLum = 0.65; // Brighten dark colors
-    } else if (nLum < 0.7) {
-        nLum = 0.7; // Slight boost for mid-range
-    } else if (nLum > 0.85) {
-        nLum = 0.8; // Tone down very bright colors
-    }
-
-    // Apply global adjustments (0-10 scale)
-    // Saturation: increase only (clamped 0-1), multiplied by 4 for stronger effect (0-40% range)
-    nSat = Math.max(0, Math.min(1, nSat + ((satAdjust * 4) / 100)));
-    
-    // Brightness: increase only (clamped 0-1)
-    nLum = Math.max(0, Math.min(1, nLum + (lumAdjust / 100)));
-
-    return ExColor.hsl2rgb([nHue, nSat, nLum, a]);
-}
-
-const MAX_CACHE_SIZE = 100; // Prevent memory issues with many characters
-let avatarColorCache = {};
-let cacheInsertionOrder = []; // Track insertion order for LRU eviction
-
-/**
- * Removes the specified cache entry and keeps insertion tracking in sync.
- * @param {string} cacheKey
- */
-function removeCacheEntry(cacheKey) {
-    delete avatarColorCache[cacheKey];
-    const index = cacheInsertionOrder.indexOf(cacheKey);
-    if (index > -1) {
-        cacheInsertionOrder.splice(index, 1);
-    }
-}
-
-/**
- * Enforces the maximum cache size by removing oldest entries
- */
-function enforceCacheLimit() {
-    if (Object.keys(avatarColorCache).length > MAX_CACHE_SIZE) {
-        // Remove oldest 20% of entries to avoid frequent cleanup
-        const entriesToRemove = Math.floor(MAX_CACHE_SIZE * 0.2);
-        for (let i = 0; i < entriesToRemove && cacheInsertionOrder.length > 0; i++) {
-            const oldestKey = cacheInsertionOrder.shift();
-            delete avatarColorCache[oldestKey];
-        }
-    }
-}
-
-/**
- * Adds an entry to the cache with size enforcement
- * @param {string} key 
- * @param {ExColor} value 
- */
-function addToCache(key, value) {
-    avatarColorCache[key] = value;
-    cacheInsertionOrder.push(key);
-    enforceCacheLimit();
-}
-
-/**
- * Clears the cache for a specific character type only
- * @param {CharacterType} charType 
- */
-function clearCacheForCharType(charType) {
-    const prefix = `${charType}|`;
-    Object.keys(avatarColorCache).forEach(key => {
-        if (key.startsWith(prefix)) {
-            removeCacheEntry(key);
-        }
-    });
-}
-
-/**
- * Clears cached colors for a specific character (all adjustment variants).
- * @param {STCharacter} stChar
- */
-function clearCacheForCharacter(stChar) {
-    const prefix = `${stChar.uid}_`;
-    Object.keys(avatarColorCache).forEach(key => {
-        if (key.startsWith(prefix)) {
-            removeCacheEntry(key);
-        }
-    });
-}
-
-/**
- * Gets the dialogue color for a character using smart color extraction.
- * 
- * @param {STCharacter} stChar 
- * @returns {Promise<ExColor?>}
- */
-async function getCharacterDialogueColor(stChar) {
-    const colorSettings = getSettingsForChar(stChar);
-    const colorizeSource = Object.keys(colorSettings.colorOverrides).includes(stChar.avatarName)
-        ? ColorizeSourceType.CHAR_COLOR_OVERRIDE
-        : colorSettings.colorizeSource;
-
-    switch (colorizeSource) {
-        case ColorizeSourceType.AVATAR_SMART: {
-            // Create cache key that includes adjustment values
-            const cacheKey = `${stChar.uid}_${colorSettings.saturationAdjustment}_${colorSettings.lightnessAdjustment}`;
-            
-            // Check cache first
-            if (avatarColorCache[cacheKey]) {
-                return avatarColorCache[cacheKey];
-            }
-            
-            try {
-                const avatar = stChar.getAvatarImageThumbnail();
-                const colorRgb = await getSmartAvatarColor(avatar);
-                const betterContrastRgb = colorRgb 
-                    ? makeBetterContrast(
-                        colorRgb, 
-                        colorSettings.saturationAdjustment || 0,
-                        colorSettings.lightnessAdjustment || 0
-                      )
-                    : DEFAULT_STATIC_DIALOGUE_COLOR_RGB;
-                const exColor = ExColor.fromRgb(betterContrastRgb);
-                
-                // Cache the result with size enforcement
-                addToCache(cacheKey, exColor);
-                return exColor;
-            } catch (error) {
-                console.warn(`[SDC] Failed to extract color from avatar for ${stChar.uid}:`, error);
-                // Return default color on error
-                const exColor = ExColor.fromRgb(DEFAULT_STATIC_DIALOGUE_COLOR_RGB);
-                addToCache(cacheKey, exColor); // Cache the fallback too
-                return exColor;
-            }
-        }
-        case ColorizeSourceType.STATIC_COLOR: {
-            return ExColor.fromHex(colorSettings.staticColor);
-        }
-        case ColorizeSourceType.CHAR_COLOR_OVERRIDE: {
-            const overrideColor = colorSettings.colorOverrides[stChar.avatarName];
-            return overrideColor ? ExColor.fromHex(overrideColor) : null;
-        }
-        case ColorizeSourceType.DISABLED:
-        default:
-            return null;
-    }
-}
-
-/**
- * 
- * @param {string} textboxValue 
- * @param {any} defaultValue 
- * @returns {string | null}
- */
 function getTextValidHexOrDefault(textboxValue, defaultValue) {
     const trimmed = textboxValue.trim();
-    if (!ExColor.isValidHexString(trimmed))
-        return defaultValue;
-
-    return ExColor.getHexWithHash(trimmed);
+    return ExColor.isValidHexString(trimmed) ? ExColor.getHexWithHash(trimmed) : defaultValue;
 }
 
-/**
- * Adds author UID attribute to a message element.
- * 
- * @param {HTMLElement} message 
- */
 function addAuthorUidClassToMessage(message) {
-    const authorChatUidAttr = "sdc-author_uid";
-    if (message.hasAttribute(authorChatUidAttr)) {
-        console.debug(`[SDC] Message already has '${authorChatUidAttr}' attribute, skipping.`);
-        return;
-    }
-
-    const messageAuthorChar = getMessageAuthor(message);
-    if (!messageAuthorChar) {
-        console.error("[SDC] Couldn't get message author character to add attribute.");
-        return;
-    }
-
-    message.setAttribute(authorChatUidAttr, messageAuthorChar.uid);
+    const attr = "sdc-author_uid";
+    if (message.hasAttribute(attr)) return;
+    const author = getMessageAuthor(message);
+    if (author) message.setAttribute(attr, author.uid);
 }
 
-function addAuthorUidToExistingMessages() {
-    const chatElem = document.getElementById("chat");
-    if (!chatElem) {
-        return;
-    }
-
-    chatElem.querySelectorAll(":scope > .mes").forEach((message) => {
-        addAuthorUidClassToMessage(message);
-    });
-}
-
-//#region Event Handlers
-
-const scheduleCharacterSettingsRefresh = debounce(async () => {
-    await updateCharactersStyleSheet();
-    saveSettingsDebounced();
-}, 120);
-
-const schedulePersonaSettingsRefresh = debounce(async () => {
-    await updatePersonasStyleSheet();
-    saveSettingsDebounced();
-}, 120);
-
-const scheduleAllSettingsRefresh = debounce(async () => {
-    await updateCharactersStyleSheet();
-    await updatePersonasStyleSheet();
-    saveSettingsDebounced();
-}, 120);
-
-function onCharacterSettingsUpdated() {
-    scheduleCharacterSettingsRefresh();
-}
-
-function onPersonaSettingsUpdated() {
-    schedulePersonaSettingsRefresh();
-}
-
-function onAnySettingsUpdated() {
-    scheduleAllSettingsRefresh();
-}
-
-/**
- * 
- * @param {STCharacter} char 
- */
+async function onCharacterSettingsUpdated() { await updateCharactersStyleSheet(); saveSettingsDebounced(); }
+async function onPersonaSettingsUpdated() { await updatePersonasStyleSheet(); saveSettingsDebounced(); }
 function onCharacterChanged(char) {
-    const colorOverride = document.getElementById("sdc-char_color_override");
-    setInputColorPickerComboValue(colorOverride, extSettings.charColorSettings.colorOverrides[char.avatarName]);
+    const override = document.getElementById("sdc-char_color_override");
+    setInputColorPickerComboValue(override, extSettings.charColorSettings.colorOverrides[char.avatarName]);
 }
-
-/**
- * 
- * @param {STCharacter} persona 
- */
 function onPersonaChanged(persona) {
-    const colorOverride = document.getElementById("sdc-persona_color_override");
-    setInputColorPickerComboValue(colorOverride, extSettings.personaColorSettings.colorOverrides[persona.avatarName]);
+    const override = document.getElementById("sdc-persona_color_override");
+    setInputColorPickerComboValue(override, extSettings.personaColorSettings.colorOverrides[persona.avatarName]);
 }
 
-//#endregion Event Handlers
-
-//#region Initialization
+function createNarrationDropdown(id, label, tooltip, onChange) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'inline-drawer';
+    const labelEl = document.createElement('label');
+    labelEl.htmlFor = id;
+    labelEl.textContent = label;
+    labelEl.title = tooltip;
+    const select = document.createElement('select');
+    select.id = id;
+    select.className = 'text_pole';
+    const options = {
+        'disabled': 'Disabled', 'Vibrant': 'Vibrant', 'DarkVibrant': 'Dark Vibrant',
+        'LightVibrant': 'Light Vibrant', 'Muted': 'Muted', 'DarkMuted': 'Dark Muted',
+        'LightMuted': 'Light Muted',
+    };
+    for (const [value, text] of Object.entries(options)) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        select.appendChild(option);
+    }
+    $(select).on('change', onChange);
+    wrapper.append(labelEl, select);
+    return wrapper;
+}
 
 function initializeStyleSheets() {
-    charactersStyleSheet = createAndAppendStyleSheet("sdc-chars_style_sheet");
-    personasStyleSheet = createAndAppendStyleSheet("sdc-personas_style_sheet");
-
-    function createAndAppendStyleSheet(id) {
-        const styleSheet = document.createElement('style');
-        styleSheet.id = id;
-        return document.body.appendChild(styleSheet);
-    }
+    charactersStyleSheet = document.createElement('style');
+    charactersStyleSheet.id = "sdc-chars_style_sheet";
+    document.body.appendChild(charactersStyleSheet);
+    personasStyleSheet = document.createElement('style');
+    personasStyleSheet.id = "sdc-personas_style_sheet";
+    document.body.appendChild(personasStyleSheet);
 }
 
 function initializeSettingsUI() {
-    const elemExtensionSettings = document.getElementById("sdc-extension-settings");
+    const extSettingsEl = document.getElementById("sdc-extension-settings");
+    const createSettingsSection = (type, isPersona) => {
+        const settings = isPersona ? extSettings.personaColorSettings : extSettings.charColorSettings;
+        const onUpdate = isPersona ? onPersonaSettingsUpdated : onCharacterSettingsUpdated;
+        
+        const dialogueSettings = extSettingsEl.querySelector(`#sdc-${type}_dialogue_settings`);
+        if (!dialogueSettings) return;
 
-    // ===== CHARACTER SETTINGS =====
-    const charDialogueSettings = elemExtensionSettings.querySelector("#sdc-char_dialogue_settings");
-    
-    // Color source dropdown
-    const charColorSourceDropdown = createColorSourceDropdown("sdc-char_colorize_source", (changedEvent) => {
-        const value = $(changedEvent.target).prop("value");
-        extSettings.charColorSettings.colorizeSource = value;
-        onCharacterSettingsUpdated();
-    });
-    charDialogueSettings.children[0].insertAdjacentElement("afterend", charColorSourceDropdown);
-    
-    // Static color picker
-    const charStaticColorPickerCombo = createColorTextPickerCombo(
-        (textboxValue) => getTextValidHexOrDefault(textboxValue, null), 
-        (colorValue) => {
-            extSettings.charColorSettings.staticColor = colorValue;
-            onCharacterSettingsUpdated();
-        }
-    );
-    charDialogueSettings.children[2].insertAdjacentElement("beforeend", charStaticColorPickerCombo);
+        dialogueSettings.innerHTML = '';
 
-    // Color name text checkbox
-    const charColorNameCheckbox = createCheckboxWithLabel(
-        "sdc-char_color_name",
-        "Apply color to character names",
-        "When enabled, character names will be colored in addition to dialogue quotes.",
-        extSettings.charColorSettings.colorNameText || false,
-        (checked) => {
-            extSettings.charColorSettings.colorNameText = checked;
-            onCharacterSettingsUpdated();
-        }
-    );
-    charDialogueSettings.children[2].insertAdjacentElement("afterend", charColorNameCheckbox);
+        const titleContainer = document.createElement('div');
+        const titleLabel = document.createElement('label');
+        const titleHeader = document.createElement('h4');
+        const titleText = isPersona ? 'Persona Narration & Dialogue' : 'Character Narration & Dialogue';
+        titleHeader.innerHTML = `${titleText}<span class="margin5 fa-solid fa-circle-info opacity50p"></span>`;
+        titleLabel.appendChild(titleHeader);
+        titleContainer.appendChild(titleLabel);
+        dialogueSettings.appendChild(titleContainer);
 
-    // Adjustment sliders
-    const charAdjustmentsGroup = charDialogueSettings.querySelector(".dc-adjustments-group");
+        const narrationSection = document.createElement('div');
+        narrationSection.className = 'narration-section';
 
-    const charSaturationSlider = createSliderWithLabel(
-        "sdc-char_saturation_adjustment",
-        "Saturation Boost",
-        "Increase color vibrancy. Range: 0-10",
-        0, 10, 1,
-        extSettings.charColorSettings.saturationAdjustment || 0,
-        (value) => {
-            extSettings.charColorSettings.saturationAdjustment = value;
-            clearCacheForCharType(CharacterType.CHARACTER); // Clear only character cache
-            onCharacterSettingsUpdated();
-        }
-    );
-    charAdjustmentsGroup.appendChild(charSaturationSlider);
+        const quotationDropdown = createNarrationDropdown(`sdc-${type}_narration_quotation`, 'Quotation Marks', 'Sets the color for text inside "quotation marks".', e => { settings.quotationColorSource = $(e.target).val(); onUpdate(); });
+        narrationSection.appendChild(quotationDropdown);
 
-    const charLightnessSlider = createSliderWithLabel(
-        "sdc-char_lightness_adjustment",
-        "Brightness Boost",
-        "Make colors brighter. Range: 0-10",
-        0, 10, 1,
-        extSettings.charColorSettings.lightnessAdjustment || 0,
-        (value) => {
-            extSettings.charColorSettings.lightnessAdjustment = value;
-            clearCacheForCharType(CharacterType.CHARACTER); // Clear only character cache
-            onCharacterSettingsUpdated();
-        }
-    );
-    charAdjustmentsGroup.appendChild(charLightnessSlider);
+        const rawDropdown = createNarrationDropdown(`sdc-${type}_narration_raw`, 'Raw Text', 'Sets the base color for narration text.', e => { settings.narrationRawColorSource = $(e.target).val(); onUpdate(); });
+        narrationSection.appendChild(rawDropdown);
 
-    // Initialize values
-    $(charColorSourceDropdown.querySelector('select'))
-        .prop("value", extSettings.charColorSettings.colorizeSource)
-        .trigger('change');
-    $(charStaticColorPickerCombo.querySelector('input[type="text"]'))
-        .prop("value", extSettings.charColorSettings.staticColor)
-        .trigger('focusout');
+        const italicDropdown = createNarrationDropdown(`sdc-${type}_narration_italic`, 'Italic Text', 'Overrides the base color for *italic* text.', e => { settings.narrationItalicColorSource = $(e.target).val(); onUpdate(); });
+        narrationSection.appendChild(italicDropdown);
 
-    // ===== PERSONA SETTINGS =====
-    const personaDialogueSettings = elemExtensionSettings.querySelector("#sdc-persona_dialogue_settings");
-    
-    // Color source dropdown
-    const personaColorSourceDropdown = createColorSourceDropdown("sdc-persona_colorize_source", (changedEvent) => {
-        const value = $(changedEvent.target).prop("value");
-        extSettings.personaColorSettings.colorizeSource = value;
-        onPersonaSettingsUpdated();
-    });
-    personaDialogueSettings.children[0].insertAdjacentElement("afterend", personaColorSourceDropdown);
-    
-    // Static color picker
-    const personaStaticColorPickerCombo = createColorTextPickerCombo(
-        (textboxValue) => getTextValidHexOrDefault(textboxValue, null), 
-        (colorValue) => {
-            extSettings.personaColorSettings.staticColor = colorValue;
-            onPersonaSettingsUpdated();
-        }
-    );
-    personaDialogueSettings.children[2].insertAdjacentElement("beforeend", personaStaticColorPickerCombo);
+        const boldDropdown = createNarrationDropdown(`sdc-${type}_narration_bold`, 'Bold Text', 'Overrides the base color for **bold** text.', e => { settings.narrationBoldColorSource = $(e.target).val(); onUpdate(); });
+        narrationSection.appendChild(boldDropdown);
 
-    // Color name text checkbox
-    const personaColorNameCheckbox = createCheckboxWithLabel(
-        "sdc-persona_color_name",
-        "Apply color to persona names",
-        "When enabled, persona names will be colored in addition to dialogue quotes.",
-        extSettings.personaColorSettings.colorNameText || false,
-        (checked) => {
-            extSettings.personaColorSettings.colorNameText = checked;
-            onPersonaSettingsUpdated();
-        }
-    );
-    personaDialogueSettings.children[2].insertAdjacentElement("afterend", personaColorNameCheckbox);
+        dialogueSettings.appendChild(narrationSection);
 
-    // Adjustment sliders
-    const personaAdjustmentsGroup = personaDialogueSettings.querySelector(".dc-adjustments-group");
+        const nameCheckbox = createCheckboxWithLabel(
+            `sdc-${type}_color_name`, 
+            `Apply color to ${type} names`, 
+            `When enabled, the character's name will use the color selected for "Quotation Marks".`, 
+            settings.colorNameText, 
+            checked => { settings.colorNameText = checked; onUpdate(); }
+        );
+        dialogueSettings.appendChild(nameCheckbox);
 
-    const personaSaturationSlider = createSliderWithLabel(
-        "sdc-persona_saturation_adjustment",
-        "Saturation Boost",
-        "Increase color vibrancy. Range: 0-10",
-        0, 10, 1,
-        extSettings.personaColorSettings.saturationAdjustment || 0,
-        (value) => {
-            extSettings.personaColorSettings.saturationAdjustment = value;
-            clearCacheForCharType(CharacterType.PERSONA); // Clear only persona cache
-            onPersonaSettingsUpdated();
-        }
-    );
-    personaAdjustmentsGroup.appendChild(personaSaturationSlider);
+        $(quotationDropdown.querySelector('select')).val(settings.quotationColorSource);
+        $(rawDropdown.querySelector('select')).val(settings.narrationRawColorSource);
+        $(italicDropdown.querySelector('select')).val(settings.narrationItalicColorSource);
+        $(boldDropdown.querySelector('select')).val(settings.narrationBoldColorSource);
+    };
 
-    const personaLightnessSlider = createSliderWithLabel(
-        "sdc-persona_lightness_adjustment",
-        "Brightness Boost",
-        "Make colors brighter. Range: 0-10",
-        0, 10, 1,
-        extSettings.personaColorSettings.lightnessAdjustment || 0,
-        (value) => {
-            extSettings.personaColorSettings.lightnessAdjustment = value;
-            clearCacheForCharType(CharacterType.PERSONA); // Clear only persona cache
-            onPersonaSettingsUpdated();
-        }
-    );
-    personaAdjustmentsGroup.appendChild(personaLightnessSlider);
-
-    // Initialize values
-    $(personaColorSourceDropdown.querySelector('select'))
-        .prop("value", extSettings.personaColorSettings.colorizeSource)
-        .trigger('change');
-    $(personaStaticColorPickerCombo.querySelector('input[type="text"]'))
-        .prop("value", extSettings.personaColorSettings.staticColor)
-        .trigger('focusout');
-}
-
-/**
- * Adds a button to the Extensions dropdown menu for Smart Dialogue Colorizer
- * This function creates a menu item in SillyTavern's Extensions dropdown
- * that scrolls to and opens the extension's settings panel.
- */
-function addExtensionMenuButton() {
-    // Select the Extensions dropdown menu
-    const extensionsMenu = document.getElementById('extensionsMenu');
-    if (!extensionsMenu) {
-        console.warn('[SDC] Extensions menu not found');
-        return;
-    }
-
-    // Check if button already exists to prevent duplicates
-    if (document.getElementById('sdc-extensions-menu-button')) {
-        return;
-    }
-
-    // Create button element with palette icon and extension name
-    const button = document.createElement('div');
-    button.id = 'sdc-extensions-menu-button';
-    button.className = 'list-group-item flex-container flexGap5 interactable';
-    button.title = 'Open Smart Dialogue Colorizer Settings';
-    button.setAttribute('tabindex', '0');
-    button.innerHTML = `
-        <i class="fa-solid fa-palette"></i>
-        <span>Dialogue Colorizer</span>
-    `;
-
-    // Append to extensions menu
-    extensionsMenu.appendChild(button);
-
-    // Set click handler to scroll to and open the settings
-    button.addEventListener('click', () => {
-        // Find the settings drawer
-        const settingsDrawer = document.getElementById('sdc-extension-settings');
-        if (!settingsDrawer) {
-            console.warn('[SDC] Settings drawer not found');
-            return;
-        }
-
-        // Scroll to the settings
-        settingsDrawer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-        // Open the drawer if it's not already open
-        const drawerToggle = settingsDrawer.querySelector('.inline-drawer-toggle');
-        const drawerContent = settingsDrawer.querySelector('.inline-drawer-content');
-        const drawerIcon = settingsDrawer.querySelector('.inline-drawer-icon');
-
-        if (drawerToggle && drawerContent && !drawerContent.classList.contains('open')) {
-            drawerToggle.classList.add('open');
-            drawerContent.classList.add('open');
-            if (drawerIcon) {
-                drawerIcon.classList.remove('down');
-                drawerIcon.classList.add('up');
-            }
-        }
-
-        // Brief highlight effect to draw attention
-        settingsDrawer.style.transition = 'background-color 0.3s ease';
-        const originalBg = settingsDrawer.style.backgroundColor;
-        settingsDrawer.style.backgroundColor = 'rgba(var(--SmartThemeBodyColor), 0.3)';
-        setTimeout(() => {
-            settingsDrawer.style.backgroundColor = originalBg;
-        }, 600);
-    });
+    createSettingsSection('char', false);
+    createSettingsSection('persona', true);
 }
 
 function initializeCharSpecificUI() {
-    // Character
-    const elemCharColorOverride = createColorOverrideElem("sdc-char_color_override", getCharacterBeingEdited);
-
-    const elemCharCardForm = document.getElementById("form_create");
-    const elemAvatarNameBlock = elemCharCardForm.querySelector("div#avatar-and-name-block");
-    elemAvatarNameBlock.insertAdjacentElement("afterend", elemCharColorOverride);
-
-    // Persona
-    const elemPersonaColorOverride = createColorOverrideElem("sdc-persona_color_override", getCurrentPersona);
-
-    const elemPersonaDescription = document.getElementById("persona_description");
-    const elemDescParent = elemPersonaDescription.parentElement;
-    elemDescParent.insertAdjacentElement("afterbegin", elemPersonaColorOverride);
-
-    /**
-     * 
-     * @param {string} id 
-     * @param {() => STCharacter} stCharGetter
-     */
-    function createColorOverrideElem(id, stCharGetter) {
-        // Create container that matches ST's form structure
+    const createOverrideElem = (id, getter) => {
         const wrapper = document.createElement('div');
         wrapper.id = id;
-        wrapper.className = "sdc-color-override-container";
-
-        // Add subtle separator at top
-        const separator = document.createElement('div');
-        separator.className = "sdc-separator";
-        
-        // Create label row with icon and preview
-        const labelRow = document.createElement('div');
-        labelRow.className = "sdc-label-row";
-        
+        wrapper.className = "dc-flex-container";
+        const hr = document.createElement('hr');
+        hr.className = "sysHR";
         const label = document.createElement('label');
-        label.htmlFor = `${id}-input`;
-        label.className = "sdc-override-label";
-        label.innerHTML = `
-            <span style="font-weight: 500;">Dialogue Color Override</span>
-            <i class="fa-solid fa-circle-info margin5 opacity50p" 
-               title="Set a custom color for this character's dialogue. Leave empty to use global settings."></i>
-        `;
-        
-        // Add a preview swatch that shows current color
-        const previewSwatch = document.createElement('div');
-        previewSwatch.className = "sdc-color-preview";
-        previewSwatch.title = "Current dialogue color preview";
-        
-        labelRow.appendChild(label);
-        labelRow.appendChild(previewSwatch);
-        
-        // Create input row with better layout
-        const inputRow = document.createElement('div');
-        inputRow.className = "sdc-input-row";
-        
-        const inputColorPickerCombo = createColorTextPickerCombo(
-            (textboxValue) => getTextValidHexOrDefault(textboxValue, ""), 
-            (colorValue) => {
-                // Update preview swatch
-                if (colorValue && colorValue.length > 0) {
-                    previewSwatch.style.backgroundColor = colorValue;
-                    previewSwatch.style.borderColor = colorValue;
-                    clearBtn.style.display = "flex";
-                } else {
-                    previewSwatch.style.backgroundColor = "transparent";
-                    previewSwatch.style.borderColor = "var(--SmartThemeBorderColor, #666)";
-                    clearBtn.style.display = "none";
-                }
-                
-                const stChar = stCharGetter();
-                const colorSettings = getSettingsForChar(stChar);
-                if (colorValue.length > 0)
-                    colorSettings.colorOverrides[stChar.avatarName] = colorValue;
-                else
-                    delete colorSettings.colorOverrides[stChar.avatarName];
-
-                // Clear cache when override changes to ensure fresh colors
-                clearCacheForCharacter(stChar);
-
-                if (stChar.type === CharacterType.PERSONA) {
-                    onPersonaSettingsUpdated();
-                } else {
-                    onCharacterSettingsUpdated();
-                }
-            }
-        );
-        
-        inputColorPickerCombo.id = `${id}-input`;
-        
-        // Add clear button with icon
-        const clearBtn = document.createElement('button');
-        clearBtn.type = "button";
-        clearBtn.className = "menu_button menu_button_icon sdc-clear-btn";
-        clearBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-        clearBtn.title = "Clear color override and use auto-detection";
-        clearBtn.style.display = "none"; // Hidden by default
-        clearBtn.onclick = () => {
-            const textInput = inputColorPickerCombo.querySelector('input[type="text"]');
-            const colorInput = inputColorPickerCombo.querySelector('input[type="color"]');
-            textInput.value = "";
-            colorInput.value = "#000000";
-            textInput.dispatchEvent(new Event('focusout', { bubbles: true }));
-        };
-        
-        inputRow.appendChild(inputColorPickerCombo);
-        inputRow.appendChild(clearBtn);
-        
-        wrapper.appendChild(separator);
-        wrapper.appendChild(labelRow);
-        wrapper.appendChild(inputRow);
-        
-        // Initialize preview with current value if exists
-        setTimeout(() => {
-            const stChar = stCharGetter();
-            const colorSettings = getSettingsForChar(stChar);
-            const currentColor = colorSettings.colorOverrides[stChar.avatarName];
-            if (currentColor) {
-                previewSwatch.style.backgroundColor = currentColor;
-                previewSwatch.style.borderColor = currentColor;
-                clearBtn.style.display = "flex";
-            }
-        }, 100);
-        
+        label.htmlFor = id;
+        label.title = "Overrides the global dialogue color setting for this character.";
+        label.innerHTML = `Dialogue Color<span class="margin5 fa-solid fa-circle-info opacity50p"></span>`;
+        const picker = createColorTextPickerCombo(val => getTextValidHexOrDefault(val, ""), color => {
+            const char = getter();
+            const settings = getSettingsForChar(char);
+            if (color) settings.colorOverrides[char.avatarName] = color;
+            else delete settings.colorOverrides[char.avatarName];
+            if (char.type === CharacterType.PERSONA) onPersonaSettingsUpdated();
+            else onCharacterSettingsUpdated();
+        });
+        wrapper.append(hr, label, picker);
         return wrapper;
-    }
+    };
+    const charOverride = createOverrideElem("sdc-char_color_override", getCharacterBeingEdited);
+    document.getElementById("avatar-and-name-block").insertAdjacentElement("afterend", charOverride);
+    const personaOverride = createOverrideElem("sdc-persona_color_override", getCurrentPersona);
+    personaOverride.removeChild(personaOverride.querySelector("hr.sysHR"));
+    document.getElementById("persona_description").parentElement.insertAdjacentElement("afterbegin", personaOverride);
 }
 
 jQuery(async ($) => {
     const settingsHtml = await $.get(`${extFolderPath}/dialogue-colorizer.html`);
-
-    const elemStExtensionSettings2 = document.getElementById("extensions_settings2");
-    $(elemStExtensionSettings2).append(settingsHtml);
-
+    $("#extensions_settings2").append(settingsHtml);
     initializeStyleSheets();
     initializeSettingsUI();
     initializeCharSpecificUI();
-
-    // Add extension menu button for quick access to settings
-    addExtensionMenuButton();
-
     eventSource.on(event_types.CHAT_CHANGED, () => updateCharactersStyleSheet());
     expEventSource.on(exp_event_type.MESSAGE_ADDED, addAuthorUidClassToMessage);
-
-    expEventSource.on(exp_event_type.CHAR_CARD_CHANGED, (char) => {
-        onCharacterChanged(char);
-        clearCacheForCharacter(char);
-        updateCharactersStyleSheet();
-    });
-    expEventSource.on(exp_event_type.PERSONA_CHANGED, (persona) => {
-        onPersonaChanged(persona);
-        clearCacheForCharacter(persona);
-        updatePersonasStyleSheet();
-    });
-    expEventSource.on(exp_event_type.PERSONA_ADDED, (persona) => {
-        clearCacheForCharacter(persona);
-        updatePersonasStyleSheet();
-    });
-    expEventSource.on(exp_event_type.PERSONA_REMOVED, (persona) => {
-        clearCacheForCharacter(persona);
-        updatePersonasStyleSheet();
-    });
-    
+    expEventSource.on(exp_event_type.CHAR_CARD_CHANGED, onCharacterChanged);
+    expEventSource.on(exp_event_type.PERSONA_CHANGED, onPersonaChanged);
     eventSource.once(event_types.APP_READY, () => {
-        onPersonaChanged(getCurrentPersona()); // Initialize color inputs with starting values.
-        addAuthorUidToExistingMessages();
-        updateCharactersStyleSheet();
+        if (isInAnyChat()) {
+            onCharacterChanged(getCharacterBeingEdited());
+            updateCharactersStyleSheet();
+        }
+        onPersonaChanged(getCurrentPersona());
         updatePersonasStyleSheet();
     });
-})
-
-//#endregion Initialization
+});
