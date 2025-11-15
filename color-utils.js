@@ -77,9 +77,10 @@ function createDownscaledCanvas(image, maxDimension = 1024) {
             height = maxDimension;
         }
     }
-
-    canvas.width = width;
-    canvas.height = height;
+    
+    // round the dimensions to the nearest whole number.
+    canvas.width = Math.round(width);
+    canvas.height = Math.round(height);
 
     // Draw the image onto the canvas, which performs the resizing.
     ctx.drawImage(image, 0, 0, width, height);
