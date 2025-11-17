@@ -79,8 +79,8 @@ function createDownscaledCanvas(image, maxDimension = 1024) {
     }
     
     // round the dimensions to the nearest whole number.
-    canvas.width = Math.round(width);
-    canvas.height = Math.round(height);
+    canvas.width = Math.round(Math.max(1, width));
+    canvas.height = Math.round(Math.max(1, height));
 
     // Draw the image onto the canvas, which performs the resizing.
     ctx.drawImage(image, 0, 0, width, height);
@@ -148,7 +148,8 @@ async function getSwatchesFromImage(image) {
     if (isMissingSwatches) {
         try {
             // Get the classified swatches from our upgraded Color Thief function
-            const colorThiefSwatches = getColorThiefSwatches(imageSourceForAnalysis, 12);
+                const colorThiefSwatches = getColorThiefSwatches(image, 12);
+;
             
             // Create a new merged swatch object. Start with Vibrant.js results.
             const mergedSwatches = { ...swatches };
