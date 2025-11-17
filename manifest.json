@@ -1,12 +1,12 @@
 {
-    "display_name": "Smart Dialogue Colorizer",
+    "display_name": "Smart Dialogue Colorizer Extended",
     "loading_order": 1,
     "requires": [],
     "optional": [],
     "js": "index.js",
     "css": "style.css",
-    "author": "Babysworld",
-    "version": "2.1.0", 
+    "author": "gusta01010, Babysworld",
+    "version": "2.2.0", 
     "homePage": "",
     "auto_update": false
 }
