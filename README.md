@@ -1,7 +1,6 @@
 # Smart Dialogue Colorizer Extended
 
-An extended and actively maintained fork of [Smart Dialogue Colorizer](https://github.com/b4bysw0rld/SillyTavern-Smart-Dialogue-Colorizer).
-
+Originally inspired by [Smart Dialogue Colorizer](https://github.com/b4bysw0rld/SillyTavern-Smart-Dialogue-Colorizer).
 
 A SillyTavern extension that automatically colors dialogue quotes based on character avatars with intelligent color extraction and quality filtering.
 
