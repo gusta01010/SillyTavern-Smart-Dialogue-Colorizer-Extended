@@ -1,4 +1,4 @@
-# Installation Guide - Smart Dialogue Colorizer
+# Installation Guide - Smart Dialogue Colorizer Extended
 
 ## 📦 Quick Install
 
@@ -21,9 +21,9 @@
 
 ## ⚙️ Initial Setup
 
-1. Open the **Extensions** panel (puzzle piece icon)
-2. Scroll down to find **Smart Dialogue Colorizer**
-3. Click to expand the settings and configure it freely.
+1. Open the **Extensions** panel (three blocks icon)
+3. Scroll down to find **Smart Dialogue Colorizer Extended**
+4. Click to expand the settings and configure it freely.
 
 ## 🧪 Testing
 
@@ -48,7 +48,7 @@
 - Or use "Static Color" mode for consistent results
 
 ### Extension Not Loading
-- Check folder name is exactly: `Smart-Dialogue-Colorizer-Extension-main`
+- Check folder name is exactly: `Smart-Dialogue-Colorizer-Extended`
 - Verify all files are present (especially `manifest.json`)
 - Check browser console (F12) for error messages
 - Make sure SillyTavern is up to date
