@@ -2,7 +2,7 @@
 
 Originally inspired by [Smart Dialogue Colorizer](https://github.com/b4bysw0rld/SillyTavern-Smart-Dialogue-Colorizer).
 
-A SillyTavern extension that automatically colors dialogue quotes based on character avatars with intelligent color extraction and quality filtering.
+A SillyTavern extension that automatically applies semantic coloring (`*italics*`, `raw text`, `**bold**`, `"quotes"`) based on character avatars. Features intelligent color extraction, quality filtering, and high customizability.
 
 ## ✨ Features
 
