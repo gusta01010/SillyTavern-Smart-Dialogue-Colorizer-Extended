@@ -7,25 +7,12 @@ A SillyTavern extension that automatically colors dialogue quotes based on chara
 ## ✨ Features
 
 ### Smart Color Extraction
-- **Intelligent Fallback System**: Automatically tries multiple color extraction methods in order:
-  - Vibrant colors (for colorful, eye-catching avatars)
-  - Dark/Light Vibrant variants
-  - Muted colors (for subtle avatars)
-  - Average palette color (as final fallback)
-- **Quality Filtering**: Automatically rejects colors that are too dark, too light, or too desaturated
+- **Intelligent Fallback System**: Automatically tries multiple color extraction methods with samples from Color Thief when none is found.
+- **Quality Filtering**: Automatically rejects colors that are too dark or too desaturated
 - **Enhanced Contrast**: Optimizes colors for readability on dark backgrounds
 
 ### Customization Options
-- **Character Colors**: Separate settings for characters and user personas
-- **Color Sources**:
-  - Avatar Smart (recommended) - Intelligent extraction with fallbacks
-  - Static Color - Use the same color for all
-  - Per-Character Override - Set custom colors for specific characters
-  - Disabled - Turn off auto-coloring
-- **Per-Character Overrides**: Set specific colors for individual characters in their character editor
-- **Global Color Adjustments**: Fine-tune all avatar-extracted colors with:
-  - Saturation boost (0-10) - Increase color vibrancy
-  - Brightness boost (0-10) - Make colors brighter
+- **Character Colors**: Separate settings for characters (**Character Narration & Dialogue**) and user personas (**Persona Narration & Dialogue**).
 - **Character Name Coloring**: Optionally apply colors to character names in addition to dialogue quotes
 
 ### CSS Variable Support
@@ -62,32 +49,31 @@ SillyTavern/public/scripts/extensions/third-party/Smart-Dialogue-Colorizer-Exten
 1. Open **Extensions** panel in SillyTavern
 2. Find **Smart Dialogue Colorizer Extended** settings
 3. Configure:
-   - **Character Dialogue Settings**: How character quotes are colored
-   - **Persona Dialogue Settings**: How your persona's quotes are colored
-4. Set per-character overrides in the Character Editor (optional)
+   - **Character Dialogue Settings**: How character texts are colored
+   - **Persona Dialogue Settings**: How your persona's texts are colored
+4. Apply color to char names (optional)
 
 ## 🔧 Configuration
 
 ### Color Source Options
 
-- **Avatar Smart** (Default): Uses intelligent color extraction with quality filtering
-- **Static Color**: Specify a single color to use for all characters
-- **Per-Character Only**: Only uses colors set per-character, uses default for others
-- **Disabled**: Turn off automatic coloring
-
-### Per-Character Colors
-
-In the Character Editor or Persona settings, you'll find a "Dialogue Color" field where you can set custom colors for specific characters, overriding the global settings.
+Uses intelligent color extraction with quality filtering for many types available:
+- **Light Vibrant**
+- **Vibrant**
+- **Dark Vibrant**
+- **Light Muted**
+- **Muted**
+- **Dark Muted**
 
 ## 🆚 Improvements Over Original
 
-- This fork maintains a simpler, more flexible options approach. 
+- This fork maintains a simpler, more flexible options approach.
 - More reliable color extraction that works with a wider variety of avatars
-- Smart fallback system prevents failures when vibrant colors aren't available
+- Smart fallback system prevents failures when vibrant colors aren't available with Color Thief as fallback to Vibrant.js.
 - Revamped contrast and lightness algorithm that ensures readability
 - Quality filtering removes poor color choices
 - Simplified UI focused on quoted text (no chat bubble complexity)
-- Cleaner codebase with better performance
+- Cleaner codebase with better performance, no bloat.
 
 ## 📝 License
 
