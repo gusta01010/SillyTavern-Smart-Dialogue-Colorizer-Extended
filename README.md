@@ -9,7 +9,7 @@ A SillyTavern extension that automatically colors dialogue quotes based on chara
 ### Smart Color Extraction
 - **Intelligent Fallback System**: Automatically tries multiple color extraction methods with samples from Color Thief when none is found.
 - **Quality Filtering**: Automatically rejects colors that are too dark or too desaturated
-- **Enhanced Contrast**: Optimizes colors for readability on dark backgrounds
+- **Enhanced Contrast**: Optimizes colors for readability on dark backgrounds based lightness and saturation automatically.
 
 ### Customization Options
 - **Character Colors**: Separate settings for characters (**Character Narration & Dialogue**) and user personas (**Persona Narration & Dialogue**).
