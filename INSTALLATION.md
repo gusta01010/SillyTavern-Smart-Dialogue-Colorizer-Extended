@@ -5,83 +5,40 @@
 ### Method 1: Using SillyTavern's Extension Installer (Recommended)
 
 1. Open SillyTavern
-2. Click on the **Extensions** (puzzle piece) icon
+2. Click on the **Extensions** (three blocks) icon
 3. Click **Install Extension**
-4. Enter your repository URL (if hosted on GitHub)
-5. Click **Save**
-6. Refresh the page
+4. Enter `https://github.com/gusta01010/SillyTavern-Smart-Dialogue-Colorizer-Extended`
+5. Click **Install just for me** or **Install for all users** depending of your choice
+6. Wait until the installation finishes with a green message and refresh the page.
 
 ### Method 2: Manual Installation
 
-1. Navigate to your SillyTavern directory
-2. Go to: `public/scripts/extensions/third-party/`
-3. Create a folder named: `Smart-Dialogue-Colorizer`
-4. Copy all extension files into this folder:
-   ```
-   Smart-Dialogue-Colorizer/
-   ├── manifest.json
-   ├── index.js
-   ├── dialogue-colorizer.html
-   ├── style.css
-   ├── color-utils.js
-   ├── element-creators.js
-   ├── settings-utils.js
-   ├── st-utils.js
-   ├── STCharacter.js
-   ├── ExColor.js
-   ├── utils.js
-   ├── ByRef.js
-   ├── Vibrant.min.js
-   ├── Vibrant.d.ts
-   ├── types.d.ts
-   ├── README.md
-   └── LICENSE
-   ```
-5. Refresh SillyTavern (F5 or Ctrl+R)
+1. In `https://github.com/gusta01010/SillyTavern-Smart-Dialogue-Colorizer-Extended`, click the green icon `<> Code` and select `Download ZIP` to download the file.
+2. Navigate to your SillyTavern directory
+3. Go to: `public/scripts/extensions/third-party/`
+4. Inside the `SillyTavern-Smart-Dialogue-Colorizer-Extended-main.zip` downloaded file, extract the `SillyTavern-Smart-Dialogue-Colorizer-Extended-main` folder to inside `third-party/` folder. and rename it to `SillyTavern-Smart-Dialogue-Colorizer-Extended`. The final result should look like this: `public/scripts/extensions/third-party/SillyTavern-Smart-Dialogue-Colorizer-Extended/`
+6. Refresh SillyTavern (F5 or Ctrl+R)
 
 ## ⚙️ Initial Setup
 
 1. Open the **Extensions** panel (puzzle piece icon)
 2. Scroll down to find **Smart Dialogue Colorizer**
-3. Click to expand the settings
-
-### Character Settings
-- **Color Source**: Set to "Avatar Smart" (default, recommended)
-- **Static Color**: Set a fallback color (default: #e18a24)
-
-### Persona Settings
-- **Color Source**: Set to "Avatar Smart" (default, recommended)
-- **Static Color**: Set a fallback color for your persona
-
-## 🎨 Setting Per-Character Colors (Optional)
-
-### For Characters:
-1. Open the **Character Editor** (edit any character)
-2. Look for **Dialogue Color** field (below avatar)
-3. Enter a hex color (e.g., `#FF5733` or `F44`)
-4. Save the character
-
-### For Personas:
-1. Open **User Settings**
-2. Go to **Persona** section
-3. Look for **Dialogue Color** field
-4. Enter a hex color
-5. Save
+3. Click to expand the settings and configure it freely.
 
 ## 🧪 Testing
 
 1. Start or open a chat
-2. Look at quoted text in messages (text between `"quotes"`)
-3. Colors should automatically apply based on who's speaking
+2. Look at, for example quoted text in messages (text between `"quotes"`)
+3. Colors should automatically apply based on who's speaking (**Configurable with Quotation Marks** setting)
 4. Try switching characters to see colors change
-5. Send a message as yourself to test persona colors
+5. Send a message as yourself to test persona colors, feel free to test other options such as `*italic*, Raw text, **Bold text**`
 
 ## 🔧 Troubleshooting
 
 ### Colors Not Appearing
 - Check if extension is enabled in Extensions panel
 - Verify the extension loaded without errors (check browser console: F12)
-- Make sure you're using quoted text in messages
+- Make sure it's not the `Disabled` option selected in settings.
 - Try refreshing the page (F5)
 
 ### Colors Are Too Dark/Light
@@ -91,14 +48,13 @@
 - Or use "Static Color" mode for consistent results
 
 ### Extension Not Loading
-- Check folder name is exactly: `Smart-Dialogue-Colorizer`
+- Check folder name is exactly: `Smart-Dialogue-Colorizer-Extension-main`
 - Verify all files are present (especially `manifest.json`)
 - Check browser console (F12) for error messages
 - Make sure SillyTavern is up to date
 
 ### Conflicts with Other Extensions
 - This extension uses prefix `sdc-` to avoid conflicts
-- It can coexist with the original Dialogue Colorizer
 - If issues occur, try disabling other dialogue-related extensions
 
 ## 📊 Performance Notes
@@ -113,7 +69,7 @@
 If you encounter issues:
 1. Check browser console (F12) for errors
 2. Look for messages starting with `[SDC]`
-3. Verify extension version in manifest.json (should be 2.0.0)
+3. Verify extension version in manifest.json (should be 2.5.0)
 4. Report issues with:
    - SillyTavern version
    - Browser and version
